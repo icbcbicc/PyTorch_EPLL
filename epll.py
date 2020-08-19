@@ -6,11 +6,12 @@ from utils import avg_col2im, im2col
 
 
 class EPLL():
-    def __init__(self, lamb, betas, num_iters, device):
-        self.device = device
+    def __init__(self, clean_im, lamb, betas, num_iters, device):
+        self.clean_im = clean_im
         self.lamb = lamb
         self.betas = betas
         self.num_iters = num_iters
+        self.device = device
 
     def load_GMM(self, prior_file):
         mat_contents = sio.loadmat(prior_file)
@@ -22,7 +23,8 @@ class EPLL():
         self.GMM["invcovs"] = torch.tensor(mat_contents['GS']['invcovs'][0, 0], dtype=torch.float64).to(self.device)
         self.GMM["mixweights"] = torch.tensor(mat_contents['GS']['mixweights'][0, 0], dtype=torch.float64).to(self.device)
 
-    def prior(self, noise_imcol, noise_sd):
+    def prior(self, noise_imcol, noise_sd) -> torch.Tensor:
+        # grayscale image only
 
         def log_gaussian_pdf(X, sigma):
             R = torch.cholesky(sigma)
@@ -40,7 +42,6 @@ class EPLL():
         noise_imcol -= mean_noise_imcol
 
         GMM_noisy_convs = torch.zeros_like(self.GMM["covs"])
-
         p_y_z = torch.zeros([self.GMM["nmodels"], noise_imcol.shape[-1]])
         sigma_noise = (noise_sd**2 * torch.eye(8**2)).to(self.device)
         for i in range(self.GMM["nmodels"]):
@@ -62,20 +63,28 @@ class EPLL():
 
         return Xhat
 
-    def denoise(self, noise_im, clean_im):
+    def denoise(self, noise_im) -> torch.Tensor:
+        """
+        input:
+            noise_im: [c, h, w]
+            clean_im: [c, h, w]
+        return:
+            restored_im: [c, h, w]
+        """
         # half quadratic split
-        restored_im = noise_im
+        restored_im = noise_im.clone()
         for beta in self.betas:
             for t in range(self.num_iters):
-                restored_imcol = im2col(restored_im)      # matlab style im2col, output shape = [batch, path_size**2, num_patches],
-                restored_imcol = self.prior(noise_imcol=restored_imcol, noise_sd=beta**(-0.5))
-                I1 = avg_col2im(restored_imcol, noise_im.shape[1], noise_im.shape[2])
-                restored_im = noise_im * self.lamb / (self.lamb + beta * 8**2) + (beta * 8**2 / (self.lamb + beta * 8**2)) * I1
+                for c in range(noise_im.shape[0]):
+                    restored_imcol = im2col(restored_im[c].unsqueeze(0))      # matlab style im2col, output shape = [batch, path_size**2, num_patches],
+                    restored_imcol = self.prior(noise_imcol=restored_imcol, noise_sd=beta**(-0.5))
+                    I1 = avg_col2im(restored_imcol, noise_im.shape[1], noise_im.shape[2])
+                    restored_im[c] = noise_im[c] * self.lamb / (self.lamb + beta * 8**2) + (beta * 8**2 / (self.lamb + beta * 8**2)) * I1
 
-                psnr1 = 10 * torch.log10(1 / torch.mean((restored_im - clean_im) ** 2))
+                psnr1 = 10 * torch.log10(1 / torch.mean((restored_im - self.clean_im) ** 2))
                 # psnr2 = 10 * torch.log10(1 / torch.mean((I1 - clean_im) ** 2))
-                print(f"[iter={t}, beta={beta:.3f}] psnr={psnr1.item():.3f}")
+                print(f"[beta={beta:.3f}, iter={t}] psnr={psnr1.item():.3f}")
 
-        # clamp 0 to 1
         torch.clamp_(restored_im, min=0, max=1)
+
         return restored_im

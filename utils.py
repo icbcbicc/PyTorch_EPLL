@@ -5,6 +5,7 @@ from torch_scatter import scatter_mean
 
 
 def im2col(x, kh=8, kw=8):
+    # x: [h, w]
     unfold = nn.Unfold(kernel_size=[kh, kw], padding=[0, 0], stride=[1, 1])
     transforms_list = transforms.Compose([transforms.Lambda(lambda x: torch.transpose(x, 1, 2)),
                                           transforms.Lambda(lambda x: torch.unsqueeze(x, dim=0)),
@@ -40,6 +41,8 @@ def avg_col2im(im, h, w):
     #     out[i - 1] = torch.mean(im[(t == i).nonzero().flatten()])
     # out = torch.reshape(out, [h, w])
 
+    # efficient version
     out = scatter_mean(src=im, index=index)
     out = torch.reshape(out[1:], [h, w])
+
     return out
