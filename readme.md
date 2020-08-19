@@ -27,6 +27,7 @@ Specifying `--use_cuda True` will let you use GPU. However, using GPU will only 
 ![result](new_demo.jpg)
 
 #### 6. TODO:
-- Support backpropagation
-- Support color image
-- Optimize speed when using GPU
+- [x] Support color image
+- [ ] Support batch processing
+- [ ] Support backpropagation
+- [ ] Optimize speed
