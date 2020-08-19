@@ -22,19 +22,6 @@ def parse_config():
     return parser.parse_args()
 
 
-def load_GMM(prior_file, device):
-    mat_contents = sio.loadmat(prior_file)
-    GMM = {}
-    GMM["dim"] = torch.tensor(mat_contents['GS']['dim'][0, 0].item()).to(device)
-    GMM["nmodels"] = torch.tensor(mat_contents['GS']['nmodels'][0, 0].item()).to(device)
-    GMM["means"] = torch.tensor(mat_contents['GS']['means'][0, 0], dtype=torch.float32).to(device)
-    GMM["covs"] = torch.tensor(mat_contents['GS']['covs'][0, 0], dtype=torch.float64).to(device)
-    GMM["invcovs"] = torch.tensor(mat_contents['GS']['invcovs'][0, 0], dtype=torch.float64).to(device)
-    GMM["mixweights"] = torch.tensor(mat_contents['GS']['mixweights'][0, 0], dtype=torch.float64).to(device)
-
-    return GMM
-
-
 if __name__ == "__main__":
     DEBUG = False
 
@@ -60,6 +47,7 @@ if __name__ == "__main__":
     # params
     lamb = 8**2 / noise_std**2
     betas = torch.tensor([1, 4, 8, 16, 32]) / noise_std**2
+    num_iters = 1
 
     # cuda
     device = torch.device("cuda" if torch.cuda.is_available() and cfg.use_cuda else "cpu")
@@ -67,13 +55,14 @@ if __name__ == "__main__":
     noise_im = noise_im.to(device)
     clean_im = clean_im.to(device)
 
-    # load the prior
-    GMM = load_GMM(cfg.prior_file, device)
+    epll = EPLL(lamb, betas, num_iters, device)
 
-    # denoise
+    # load the GMM prior
+    epll.load_GMM(cfg.prior_file)
+
+    # denoising
     start = time.time()
-    epll = EPLL(device)
-    restored_im = epll.denoise(noise_im, clean_im, GMM, lamb, betas, 1)
+    restored_im = epll.denoise(noise_im, clean_im)
     print(f"[*] Eelapsed time is: {time.time() - start:.1f} s")
 
     # display
