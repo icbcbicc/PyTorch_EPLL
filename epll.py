@@ -16,48 +16,47 @@ class EPLL():
     def load_GMM(self, prior_file):
         mat_contents = sio.loadmat(prior_file)
         self.GMM = {}
-        self.GMM["dim"] = torch.tensor(mat_contents['GS']['dim'][0, 0].item()).to(self.device)
         self.GMM["nmodels"] = torch.tensor(mat_contents['GS']['nmodels'][0, 0].item()).to(self.device)
-        self.GMM["means"] = torch.tensor(mat_contents['GS']['means'][0, 0], dtype=torch.float32).to(self.device)
-        self.GMM["covs"] = torch.tensor(mat_contents['GS']['covs'][0, 0], dtype=torch.float64).to(self.device)
-        self.GMM["invcovs"] = torch.tensor(mat_contents['GS']['invcovs'][0, 0], dtype=torch.float64).to(self.device)
-        self.GMM["mixweights"] = torch.tensor(mat_contents['GS']['mixweights'][0, 0], dtype=torch.float64).to(self.device)
+        self.GMM["means"] = torch.tensor(mat_contents['GS']['means'][0, 0], dtype=torch.float32).to(self.device).permute(1, 0)        # shape: [200, 64]
+        self.GMM["mixweights"] = torch.tensor(mat_contents['GS']['mixweights'][0, 0], dtype=torch.float32).to(self.device)            # shape: [200, 1]
+        self.GMM["covs"] = torch.tensor(mat_contents['GS']['covs'][0, 0], dtype=torch.float32).to(self.device).permute(2, 0, 1)       # shape: [200, 64, 64]
 
     def prior(self, noise_imcol, noise_sd) -> torch.Tensor:
         # grayscale image only
 
         def log_gaussian_pdf(X, sigma):
             R = torch.cholesky(sigma)
-            solutoin, _ = torch.solve(X, R)
-            q = torch.sum(solutoin**2, dim=0)
-            c = X.shape[0] * torch.log(torch.tensor(2 * np.pi)) + 2 * torch.sum(torch.log(torch.diagonal(R)))
+            q = torch.zeros([X.shape[0], X.shape[1], R.shape[0], X.shape[3]])
+            for i, item in enumerate(X):
+                for c, ctem in enumerate(item):
+                    solution, _ = torch.solve(ctem, R)
+                    q[i, c] = torch.sum(solution**2, dim=1)
+            c = X.shape[2] * torch.log(torch.tensor(2 * np.pi)) + 2 * torch.sum(torch.log(torch.diagonal(R, dim1=1, dim2=2)), dim=1, keepdim=True)
+            c = c.unsqueeze(0).unsqueeze(0)
             y = -(c + q) / 2
+            y = torch.mean(y, dim=1)
             return y
 
-        # debug
-        noise_imcol = noise_imcol[0]
-
         # remove DC component
-        mean_noise_imcol = torch.mean(noise_imcol, dim=0)
+        mean_noise_imcol = torch.mean(noise_imcol, dim=2, keepdim=True)
         noise_imcol -= mean_noise_imcol
 
-        GMM_noisy_convs = torch.zeros_like(self.GMM["covs"])
-        p_y_z = torch.zeros([self.GMM["nmodels"], noise_imcol.shape[-1]])
-        sigma_noise = (noise_sd**2 * torch.eye(8**2)).to(self.device)
-        for i in range(self.GMM["nmodels"]):
-            GMM_noisy_convs[:, :, i] = self.GMM["covs"][:, :, i] + sigma_noise
-            p_y_z[i] = torch.log(self.GMM["mixweights"][i]) + log_gaussian_pdf(noise_imcol, GMM_noisy_convs[:, :, i])
+        GMM_noisy_covs = torch.zeros_like(self.GMM["covs"])
+        sigma_noise = (noise_sd**2 * torch.eye(8**2)).to(self.device)      # shape: [64, 64]
+        GMM_noisy_covs = self.GMM["covs"] + sigma_noise
 
-        max_index = torch.argmax(p_y_z, dim=0)
+        p_y_z = torch.log(self.GMM["mixweights"]) + log_gaussian_pdf(noise_imcol, GMM_noisy_covs)   # shape: [batch_size, 200, noise_imcol.shape[-1]]
+
+        max_index = torch.argmax(p_y_z, dim=1)
 
         # weiner filtering
         Xhat = torch.zeros_like(noise_imcol)
-        for i in range(self.GMM["nmodels"]):
-            index = torch.nonzero((max_index - i) == 0, as_tuple=False)[:, 0]
-            A = self.GMM["covs"][:, :, i] + sigma_noise
-            B = torch.matmul(self.GMM["covs"][:, :, i], noise_imcol[:, index]) + torch.matmul(sigma_noise, self.GMM["means"][:, i].unsqueeze(dim=1).repeat(1, len(index)))
-            solutoin, _ = torch.solve(B, A)
-            Xhat[:, index] = solutoin
+        for b in range(Xhat.shape[0]):
+            for i in range(self.GMM["nmodels"]):
+                index = torch.nonzero((max_index[b] - i) == 0, as_tuple=False)[:, 0]
+                B = torch.matmul(self.GMM["covs"][i], noise_imcol[b, :, :, index])
+                solution, _ = torch.solve(B, GMM_noisy_covs[i])
+                Xhat[b, :, :, index] = solution
 
         Xhat += mean_noise_imcol
 
@@ -66,20 +65,21 @@ class EPLL():
     def denoise(self, noise_im) -> torch.Tensor:
         """
         input:
-            noise_im: [c, h, w]
-            clean_im: [c, h, w]
+            noise_im: [b, c, h, w]
+            clean_im: [b, c, h, w]
         return:
-            restored_im: [c, h, w]
+            restored_im: [b, c, h, w]
         """
         # half quadratic split
         restored_im = noise_im.clone()
         for beta in self.betas:
             for t in range(self.num_iters):
-                for c in range(noise_im.shape[0]):
-                    restored_imcol = im2col(restored_im[c].unsqueeze(0))      # matlab style im2col, output shape = [batch, path_size**2, num_patches],
-                    restored_imcol = self.prior(noise_imcol=restored_imcol, noise_sd=beta**(-0.5))
-                    I1 = avg_col2im(restored_imcol, noise_im.shape[1], noise_im.shape[2])
-                    restored_im[c] = noise_im[c] * self.lamb / (self.lamb + beta * 8**2) + (beta * 8**2 / (self.lamb + beta * 8**2)) * I1
+                restored_imcol = im2col(restored_im)      # matlab style im2col, output shape = [batch, c * patch_size**2, num_patches],
+                restored_imcol = self.prior(noise_imcol=restored_imcol, noise_sd=beta**(-0.5))
+                I1 = torch.zeros_like(restored_im)
+                for b in range(I1.shape[0]):
+                    I1[b] = avg_col2im(restored_imcol[b], noise_im.shape[2], noise_im.shape[3])
+                restored_im = noise_im * self.lamb / (self.lamb + beta * 8**2) + (beta * 8**2 / (self.lamb + beta * 8**2)) * I1
 
                 psnr1 = 10 * torch.log10(1 / torch.mean((restored_im - self.clean_im) ** 2))
                 # psnr2 = 10 * torch.log10(1 / torch.mean((I1 - clean_im) ** 2))

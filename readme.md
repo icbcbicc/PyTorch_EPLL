@@ -7,27 +7,33 @@ The EPLL image prior model is presented in ["D. Zoran and Y. Weiss, "From learni
 #### 2. Acknowledgement:
 This code is based on the original [Matlab implementation](http://www.cs.huji.ac.il/~daniez/epllcode.zip), authored by [Yair Weiss](https://www.cs.huji.ac.il/~yweiss/). The pre-trained GMM model is also borrowed from the original code.
 
-#### 3. Requirements:
+#### 3. Key features:
+
+- Pure PyTorch implementation
+- Support color image
+- Support batch processing (input.shape=[B, C, H, W]):
+
+#### 4. Requirements:
 
 - `pip install torch-scatter`, tested with version 2.0.5.
-- Tested with `pytorch=1.5.0`
+- Tested with `pytorch=1.6.0`
 
-#### 4. Usage:
+#### 5. Usage:
 
 Denoising a clean grayscale image **160068.jpg** contaminated by gaussian noise of standard deviation **0.1**:
 
 `python epll_demo.py -i 160068.jpg -std 0.1`
 
-Specifying `--use_cuda True` will let you use GPU. However, using GPU will only make it 2 times slower.
+Specifying `--use_cuda True` will let you use GPU. However, this may consume a lot of GPU RAM.
 
-#### 5. Results:
+#### 6. Results:
 ##### 160068.jpg
 ![result](160068_demo.jpg)
 ##### new.jpg
 ![result](new_demo.jpg)
 
-#### 6. TODO:
+#### 7. TODO:
 - [x] Support color image
-- [ ] Support batch processing
+- [x] Support batch processing
+- [x] Optimize speed
 - [ ] Support backpropagation
-- [ ] Optimize speed
