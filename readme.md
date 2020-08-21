@@ -11,7 +11,8 @@ This code is based on the original [Matlab implementation](http://www.cs.huji.ac
 
 - Pure PyTorch implementation
 - Support color image
-- Support batch processing (input.shape=[B, C, H, W]):
+- Support batch mode (input.shape=[B, C, H, W])
+- Support parallel processing: `--parallel True` (requires more RAM)
 
 #### 4. Requirements:
 
@@ -24,7 +25,8 @@ Denoising a clean grayscale image **160068.jpg** contaminated by gaussian noise 
 
 `python epll_demo.py -i 160068.jpg -std 0.1`
 
-Specifying `--use_cuda True` will let you use GPU. However, this may consume a lot of GPU RAM.
+- Specifying `--parallel True` will speed up the code but this requires more RAM.
+- Specifying `--use_cuda True` will let you use GPU. However, this may consume a lot of GPU RAM.
 
 #### 6. Results:
 ##### 160068.jpg

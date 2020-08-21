@@ -10,15 +10,17 @@ import torch
 import torchvision.transforms as transforms
 
 from epll import EPLL
+from epll_serial import EPLL_serial
 
 
 def parse_config():
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--im_file", type=str, default="160068.jpg", help="path to the clean image")
     parser.add_argument("-std", "--noise_std", type=float, default=0.1, help="standard deviation of random gaussian noise")
+    parser.add_argument("--parallel", type=lambda x: bool(strtobool(x)), default=True, help="parallel mode or serial mode")
     parser.add_argument("--use_cuda", type=lambda x: bool(strtobool(x)), default=False)
-    parser.add_argument("-p", "--prior_file", type=str, default="GSModel_8x8_200_2M_noDC_zeromean.mat", help="path to the GMM prior")
-    parser.add_argument("-n", "--noise_file", type=str, default="noise_160068.mat", help="path to the gaussian noise with std=1, debug only")
+    parser.add_argument("--prior_file", type=str, default="GSModel_8x8_200_2M_noDC_zeromean.mat", help="path to the GMM prior")
+    parser.add_argument("--noise_file", type=str, default="noise_160068.mat", help="path to the gaussian noise with std=1, debug only")
     return parser.parse_args()
 
 
@@ -33,6 +35,7 @@ if __name__ == "__main__":
 
     # make a batch
     clean_im = torch.stack([clean_im, clean_im], dim=0)        # [2, c, w, h]
+    print(f"[*] Processing {clean_im.shape[0]} images in a batch")
 
     # add noise
     noise_std = cfg.noise_std
@@ -59,7 +62,10 @@ if __name__ == "__main__":
     noise_im = noise_im.to(device)
     clean_im = clean_im.to(device)
 
-    epll = EPLL(clean_im, lamb, betas, num_iters, device)
+    if cfg.parallel:
+        epll = EPLL(clean_im, lamb, betas, num_iters, device)
+    else:
+        epll = EPLL_serial(clean_im, lamb, betas, num_iters, device)
 
     # load the GMM prior
     epll.load_GMM(cfg.prior_file)

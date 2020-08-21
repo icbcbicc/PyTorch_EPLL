@@ -73,7 +73,7 @@ class EPLL():
         restored_im = noise_im.clone()
         for beta in self.betas:
             for t in range(self.num_iters):
-                restored_imcol = im2col(restored_im)      # matlab style im2col, output shape = [batch, c * patch_size**2, num_patches],
+                restored_imcol = im2col(restored_im)      # matlab style im2col, output shape = [batch, c, patch_size**2, num_patches],
                 restored_imcol = self.prior(noise_imcol=restored_imcol, noise_sd=beta**(-0.5))
                 I1 = torch.zeros_like(restored_im)
                 for b in range(I1.shape[0]):
