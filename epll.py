@@ -22,7 +22,6 @@ class EPLL():
         self.GMM["covs"] = torch.tensor(mat_contents['GS']['covs'][0, 0], dtype=torch.float32).to(self.device).permute(2, 0, 1)       # shape: [200, 64, 64]
 
     def prior(self, noise_imcol, noise_sd) -> torch.Tensor:
-        # grayscale image only
 
         def log_gaussian_pdf(X, sigma):
             R = torch.cholesky(sigma)

@@ -5,8 +5,7 @@ from torch_scatter import scatter_mean
 
 
 def im2col(x, kh=8, kw=8):
-    # x: [h, w]
-    # unfold = nn.Unfold(kernel_size=[kh, kw], padding=[0, 0], stride=[1, 1])
+    # x: [b, c, h, w]
     transforms_list = transforms.Compose([transforms.Lambda(lambda x: torch.transpose(x, 2, 3)),
                                           transforms.Lambda(lambda x: x.permute(0, 2, 3, 1).unfold(1, kh, 1).unfold(2, kw, 1).permute(0, 3, 4, 5, 1, 2).reshape(x.shape[0], x.shape[1], kh * kw, -1))])
     x = transforms_list(x)
