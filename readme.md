@@ -12,13 +12,13 @@ This code is based on the original [Matlab implementation](http://www.cs.huji.ac
 - Pure PyTorch implementation
 - Support color image
 - Support batch mode (input.shape=[B, C, H, W])
-- Adjustable stride: `--stride n` (the stride in the original matlab code is fixed to 1, higher stride will speed up the code and reduce RAM usage)
-- Support parallel processing: `--parallel True` (requires more RAM)
+- Adjustable stride: `--stride n` (default 4, the stride in the original matlab code is fixed to 1, higher stride will speed up the code and reduce RAM usage)
+- Support parallel processing: `--parallel True` (default True, requires more RAM)
 
 #### 4. Requirements:
 
-- `pip install torch-scatter`, tested with version 2.0.5.
-- Tested with `pytorch=1.6.0`
+- [torch-scatter](https://github.com/rusty1s/pytorch_scatter), tested with version 2.0.5
+- Tested with pytorch 1.6.0 and cuda 10.2 on Ubuntu 18.04
 
 #### 5. Usage:
 
@@ -40,4 +40,4 @@ Denoising a clean grayscale image **160068.jpg** contaminated by gaussian noise 
 - [x] Support color image
 - [x] Support batch processing
 - [x] Optimize speed
-- [ ] Support backpropagation
+- [x] Support backpropagation
