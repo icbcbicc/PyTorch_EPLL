@@ -13,11 +13,12 @@ class EPLL_serial():
             process this channel
     """
 
-    def __init__(self, clean_im, lamb, betas, num_iters, device):
+    def __init__(self, clean_im, lamb, betas, num_iters, stride, device):
         self.clean_im = clean_im
         self.lamb = lamb
         self.betas = betas
         self.num_iters = num_iters
+        self.stride = stride
         self.device = device
 
     def load_GMM(self, prior_file):
@@ -84,14 +85,14 @@ class EPLL_serial():
             for beta in self.betas:
                 for t in range(self.num_iters):
                     for c in range(noise_im.shape[0]):
-                        restored_imcol = im2col_serial(restored_im[c])      # matlab style im2col, output shape = [batch, path_size**2, num_patches],
+                        restored_imcol = im2col_serial(restored_im[c], 8, 8, self.stride)      # matlab style im2col, output shape = [batch, path_size**2, num_patches],
                         restored_imcol = self.prior(noise_imcol=restored_imcol, noise_sd=beta**(-0.5))
-                        I1 = avg_col2im_serial(restored_imcol, noise_im.shape[1], noise_im.shape[2])
+                        I1 = avg_col2im_serial(restored_imcol, noise_im.shape[1], noise_im.shape[2], self.stride)
                         restored_im[c] = noise_im[c] * self.lamb / (self.lamb + beta * 8**2) + (beta * 8**2 / (self.lamb + beta * 8**2)) * I1
 
                     psnr1 = 10 * torch.log10(1 / torch.mean((restored_im - self.clean_im) ** 2))
                     # psnr2 = 10 * torch.log10(1 / torch.mean((I1 - clean_im) ** 2))
-                    print(f"    [beta={beta:.3f}, iter={t}] psnr={psnr1.item():.3f}")
+                    print(f"    [beta={beta:.3f}, iter={t}] PSNR={psnr1.item():.3f}")
 
             restored_im_batch[im_count] = restored_im
 

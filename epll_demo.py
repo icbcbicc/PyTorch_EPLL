@@ -15,8 +15,9 @@ from epll_serial import EPLL_serial
 
 def parse_config():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--im_file", type=str, default="160068.jpg", help="path to the clean image")
-    parser.add_argument("-std", "--noise_std", type=float, default=0.1, help="standard deviation of random gaussian noise")
+    parser.add_argument("--im_file", type=str, default="160068.jpg", help="path to the clean image")
+    parser.add_argument("--noise_std", type=float, default=0.1, help="standard deviation of random gaussian noise")
+    parser.add_argument("--stride", type=int, default=4, help="stride use to extract patches")
     parser.add_argument("--parallel", type=lambda x: bool(strtobool(x)), default=True, help="parallel mode or serial mode")
     parser.add_argument("--use_cuda", type=lambda x: bool(strtobool(x)), default=False)
     parser.add_argument("--prior_file", type=str, default="GSModel_8x8_200_2M_noDC_zeromean.mat", help="path to the GMM prior")
@@ -31,7 +32,10 @@ if __name__ == "__main__":
 
     # load the image
     to_tensor = transforms.ToTensor()
-    clean_im = to_tensor(Image.open(cfg.im_file)).float()     # [c, w, h]
+    clean_im = to_tensor(Image.open(cfg.im_file).crop((0, 0, 480, 320))).float()     # [c, w, h]
+
+    if (clean_im.shape[1] - 8) % cfg.stride != 0 or (clean_im.shape[2] - 8) % cfg.stride != 0:
+        raise Exception(f"Image dimension {clean_im.shape[1:]} does not fit with stride {cfg.stride}")
 
     # make a batch
     clean_im = torch.stack([clean_im, clean_im], dim=0)        # [2, c, w, h]
@@ -63,9 +67,9 @@ if __name__ == "__main__":
     clean_im = clean_im.to(device)
 
     if cfg.parallel:
-        epll = EPLL(clean_im, lamb, betas, num_iters, device)
+        epll = EPLL(clean_im, lamb, betas, num_iters, cfg.stride, device)
     else:
-        epll = EPLL_serial(clean_im, lamb, betas, num_iters, device)
+        epll = EPLL_serial(clean_im, lamb, betas, num_iters, cfg.stride, device)
 
     # load the GMM prior
     epll.load_GMM(cfg.prior_file)
