@@ -47,20 +47,7 @@ class EPLL():
 
         p_y_z = torch.log(self.GMM["mixweights"]) + log_gaussian_pdf(noise_imcol, GMM_noisy_covs)   # shape: [batch_size, 200, noise_imcol.shape[-1]]
 
-        max_index = torch.argmax(p_y_z, dim=1)
-
-        # weiner filtering
-        Xhat = torch.zeros_like(noise_imcol)
-        for b in range(Xhat.shape[0]):
-            for i in range(self.GMM["nmodels"]):
-                index = torch.nonzero((max_index[b] - i) == 0, as_tuple=False)[:, 0]
-                B = torch.matmul(self.GMM["covs"][i], noise_imcol[b, :, :, index])
-                solution = torch.matmul(GMM_noisy_covs[i].inverse(), B)
-                Xhat[b, :, :, index] = solution
-
-        Xhat += mean_noise_imcol
-
-        return Xhat
+        return p_y_z, mean_noise_imcol, GMM_noisy_covs
 
     def denoise(self, noise_im) -> torch.Tensor:
         """
@@ -75,7 +62,22 @@ class EPLL():
         for beta in self.betas:
             for t in range(self.num_iters):
                 restored_imcol = im2col(restored_im, 8, 8, self.stride)      # matlab style im2col, output shape = [batch, c, patch_size**2, num_patches],
-                restored_imcol = self.prior(noise_imcol=restored_imcol, noise_sd=beta**(-0.5))
+
+                p_y_z, mean_noise_imcol, GMM_noisy_covs = self.prior(noise_imcol=restored_imcol, noise_sd=beta**(-0.5))
+
+                max_index = torch.argmax(p_y_z, dim=1)
+                # weiner filtering
+                Xhat = torch.zeros_like(restored_imcol)
+                for b in range(Xhat.shape[0]):
+                    for i in range(self.GMM["nmodels"]):
+                        index = torch.nonzero((max_index[b] - i) == 0, as_tuple=False)[:, 0]
+                        B = torch.matmul(self.GMM["covs"][i], restored_imcol[b, :, :, index])
+                        solution = torch.matmul(GMM_noisy_covs[i].inverse(), B)
+                        Xhat[b, :, :, index] = solution
+
+                Xhat += mean_noise_imcol
+                restored_imcol = Xhat
+
                 I1 = torch.zeros_like(restored_im)
                 for b in range(I1.shape[0]):
                     I1[b] = avg_col2im(restored_imcol[b], noise_im.shape[2], noise_im.shape[3], self.stride)
