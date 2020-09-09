@@ -63,10 +63,11 @@ class EPLL():
             for t in range(self.num_iters):
                 restored_imcol = im2col(restored_im, 8, 8, self.stride)      # matlab style im2col, output shape = [batch, c, patch_size**2, num_patches],
 
+                # GMM prior
                 p_y_z, mean_noise_imcol, GMM_noisy_covs = self.prior(noise_imcol=restored_imcol, noise_sd=beta**(-0.5))
 
+                # weiner filtering: update z in Equa. 5
                 max_index = torch.argmax(p_y_z, dim=1)
-                # weiner filtering
                 Xhat = torch.zeros_like(restored_imcol)
                 for b in range(Xhat.shape[0]):
                     for i in range(self.GMM["nmodels"]):
@@ -81,10 +82,11 @@ class EPLL():
                 I1 = torch.zeros_like(restored_im)
                 for b in range(I1.shape[0]):
                     I1[b] = avg_col2im(restored_imcol[b], noise_im.shape[2], noise_im.shape[3], self.stride)
+
+                # update Xhat in Equa. 4
                 restored_im = noise_im * self.lamb / (self.lamb + beta * 8**2) + (beta * 8**2 / (self.lamb + beta * 8**2)) * I1
 
                 psnr1 = 10 * torch.log10(1 / torch.mean((restored_im - self.clean_im) ** 2))
-                # psnr2 = 10 * torch.log10(1 / torch.mean((I1 - clean_im) ** 2))
                 print(f"[beta={beta:.3f}, iter={t}] PSNR={psnr1.item():.3f}")
 
         torch.clamp_(restored_im, min=0, max=1)
