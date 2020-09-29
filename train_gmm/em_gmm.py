@@ -5,6 +5,7 @@ import time
 import joblib
 import numpy as np
 import PIL.Image as Image
+import scipy.io as sio
 from sklearn import feature_extraction, mixture
 
 
@@ -44,6 +45,7 @@ if __name__ == '__main__':
     test_data = read_data(os.path.join(data_path, "test"), num_samples)
     np.save(f"train_gmm/train_data_{num_samples}.npy", train_data)
     np.save(f"train_gmm/test_data_{num_samples}.npy", test_data)
+    sio.savemat(f"train_gmm/data_{num_samples}.mat", dict(train_data=train_data, test_data=test_data))
     print(f"{time.time() - start:.3f} s")
 
     # fit a GMM model with EM
